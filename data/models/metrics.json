@@ -1,55 +1,89 @@
 {
-  "trained_at": "2026-11-05T15:49:55",
-  "series_start": "2018-01-01",
-  "series_end": "2026-10-01",
-  "n_obs": 106,
-  "horizon": 24,
-  "backtest": [
-    {
-      "model": "Holt-Winters",
-      "MAE": 2.467,
-      "RMSE": 2.856,
-      "MAPE": 61.662
-    },
-    {
-      "model": "SARIMA",
-      "MAE": 2.094,
-      "RMSE": 2.482,
-      "MAPE": 64.502
-    }
-  ],
-  "gbm": {
-    "MAE": 1.7948873082060677,
-    "RMSE": 2.3261117965510536,
-    "R2": 0.277865992618361
+ "trained_at": "2026-11-05T15:49:55",
+ "series_start": "2018-01-01",
+ "series_end": "2026-10-01",
+ "n_obs": 106,
+ "horizon": 24,
+ "backtest": [
+  {
+   "model": "Holt-Winters",
+   "MAE": 2.467,
+   "RMSE": 2.856,
+   "MAPE": 61.662
   },
-  "classifier": {
-    "AUC": 0.9404950615778562,
-    "average_precision": 0.978763342086657,
-    "accuracy": 0.7575757575757576,
-    "precision": 1.0,
-    "recall": 0.6546762589928058,
-    "positive_rate": 0.702020202020202,
-    "n_test": 198
+  {
+   "model": "SARIMA",
+   "MAE": 2.094,
+   "RMSE": 2.482,
+   "MAPE": 64.502
+  }
+ ],
+ "gbm": {
+  "MAE": 1.7948873082060677,
+  "RMSE": 2.3261117965510536,
+  "R2": 0.277865992618361
+ },
+ "classifier": {
+  "AUC": 0.9404950615778562,
+  "average_precision": 0.978763342086657,
+  "accuracy": 0.7575757575757576,
+  "precision": 1.0,
+  "recall": 0.6546762589928058,
+  "positive_rate": 0.702020202020202,
+  "n_test": 198
+ },
+ "shap_base_value": 3.8994152803985673,
+ "pca_explained": [
+  0.2994,
+  0.204
+ ],
+ "features": [
+  "lag1",
+  "lag2",
+  "lag3",
+  "lag6",
+  "lag12",
+  "ma3",
+  "ma6",
+  "ma12",
+  "vol12",
+  "month_sin",
+  "month_cos",
+  "time_idx"
+ ],
+ "target_rate": 4.0,
+ "backtest_folds": [
+  {
+   "model": "SARIMA",
+   "window": "2024-11..2025-10",
+   "MAE": 1.1565,
+   "RMSE": 1.3011,
+   "MAPE": 78.4534,
+   "bias": -1.1296
   },
-  "shap_base_value": 3.8994152803985673,
-  "pca_explained": [
-    0.2994,
-    0.204
-  ],
-  "features": [
-    "lag1",
-    "lag2",
-    "lag3",
-    "lag6",
-    "lag12",
-    "ma3",
-    "ma6",
-    "ma12",
-    "vol12",
-    "month_sin",
-    "month_cos",
-    "time_idx"
-  ],
-  "target_rate": 4.0
+  {
+   "model": "Holt-Winters",
+   "window": "2024-11..2025-10",
+   "MAE": 0.8351,
+   "RMSE": 0.8974,
+   "MAPE": 51.6336,
+   "bias": 0.8351
+  },
+  {
+   "model": "SARIMA",
+   "window": "2025-11..2026-10",
+   "MAE": 3.0308,
+   "RMSE": 3.6623,
+   "MAPE": 50.5505,
+   "bias": 3.0003
+  },
+  {
+   "model": "Holt-Winters",
+   "window": "2025-11..2026-10",
+   "MAE": 4.0984,
+   "RMSE": 4.8147,
+   "MAPE": 71.6898,
+   "bias": 4.0984
+  }
+ ]
 }
