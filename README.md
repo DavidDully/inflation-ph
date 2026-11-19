@@ -1,6 +1,6 @@
 ---
 title: Inflation Ph
-emoji: 🐨
+emoji: 📉
 colorFrom: indigo
 colorTo: gray
 sdk: docker
