@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philippine inflation dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/css/app.css">
+<script type="importmap">
+{ "imports": {
+  "animejs": "/static/vendor/anime.esm.min.js",
+  "three": "/static/vendor/three.module.js",
+  "three/addons/": "/static/vendor/addons/"
+}}
+</script>
+<script src="/static/vendor/plotly.min.js" defer></script>
+</head>
+<body>
+<div id="sr-live" class="sr-only" aria-live="polite"></div>
+<section class="landing" id="landing" aria-labelledby="landingTitle">
+  <h1 class="landing-title" id="landingTitle">Philippine inflation by region</h1>
+  <div id="landingMap" class="landing-map" role="application" tabindex="0"
+       aria-label="3D map of Philippine regions. Drag to rotate, scroll to zoom."></div>
+  <div class="map-tip" id="landingTip"></div>
+  <div class="landing-legend">
+    <p id="landingLegendLabel">Inflation</p>
+    <div class="landing-ramp" aria-hidden="true"></div>
+    <div class="landing-ends"><span id="landingLo">0%</span><span id="landingHi">12% or more</span></div>
+    <p class="landing-nodata"><i aria-hidden="true"></i>No data</p>
+  </div>
+  <aside class="landing-card" id="landingCard" hidden aria-live="polite">
+    <h2 id="landingCardName"></h2>
+    <p class="landing-card-value"><b id="landingCardValue"></b> <span id="landingCardDelta"></span></p>
+    <div class="landing-card-row">
+      <p class="landing-card-label">What pushes prices up nationwide</p>
+      <label class="landing-year">Compare with <select id="landingYear"></select></label>
+    </div>
+    <div id="landingPie" class="landing-pie"></div>
+  </aside>
+  <aside class="landing-trend" id="landingTrend" hidden aria-live="polite">
+    <p class="landing-card-label">Inflation since 2019</p>
+    <div id="landingLine"></div>
+  </aside>
+  <button class="btn landing-go" id="landingGo" type="button">Know more</button>
+</section>
+
+<div class="app" hidden>
+  <aside class="rail" aria-label="Filters and region selector">
+    <h1>Philippine inflation</h1>
+
+    <label for="regionSelect">Region</label>
+    <select id="regionSelect" aria-label="Select a region"><option value="">Philippines (national)</option></select>
+
+    <label for="startDate">Date range</label>
+    <div class="range">
+      <input id="startDate" type="month" min="2018-01" max="2026-10" value="2018-01" aria-label="Start month">
+      <input id="endDate" type="month" min="2018-01" max="2026-10" value="2026-10" aria-label="End month">
+    </div>
+
+    <label for="metricSelect">What the map shows</label>
+    <select id="metricSelect">
+      <option value="yoy">Inflation (year-on-year)</option>
+      <option value="mom">Change from last month</option>
+    </select>
+
+    <label for="sectorSelect">Spending category</label>
+    <select id="sectorSelect"><option value="">All sectors</option></select>
+
+    <label for="timeScrubber">Map month <span id="scrubLabel">Oct 2026</span></label>
+    <input id="timeScrubber" type="range" min="0" max="105" value="105" step="1" aria-label="Map month">
+    <div class="range">
+      <button class="btn" id="playBtn" aria-label="Play through months" disabled>Play</button>
+      <button class="btn" id="resetBtn">Reset</button>
+    </div>
+
+    <p class="rail-note">Source: PSA OpenSTAT. Forecasts are estimates, not official projections.</p>
+  </aside>
+
+  <main class="main" id="main" tabindex="-1">
+    <div class="topbar"><h2 id="pageTitle">National overview</h2><div class="chips" id="chips"></div></div>
+
+    <section class="kpis" id="kpis" aria-label="Key indicators"></section>
+
+    <section class="hero-grid">
+      <div class="card map-card">
+        <div class="card-head">
+          <h3>Where inflation is</h3>
+          <div class="card-tools">
+            <button class="tool" data-sql="map" data-sql-args='{"date":"MAPDATE"}'>View SQL</button>
+            <button class="tool" data-export="map">CSV</button>
+          </div>
+        </div>
+        <div class="map-wrap">
+          <div class="map-tools">
+            <button class="btn" data-view="top">Top-down</button>
+            <button class="btn" data-view="tilt">Tilt 45°</button>
+            <button class="btn" data-view="reset">Reset</button>
+          </div>
+          <button class="btn news-btn" id="newsBtn" type="button" aria-expanded="false" aria-controls="newsStack">Related news</button>
+          <aside class="news-stack" id="newsStack" hidden aria-label="Related news">
+            <p class="news-why" id="newsWhy"></p>
+            <div id="newsCards"></div>
+          </aside>
+          <div class="map-badge" id="mapBadge">Inflation, Oct 2026</div>
+          <div class="map-tip" id="mapTip"></div>
+          <div id="map3d" class="plot map" role="application" tabindex="0"
+               aria-label="3D map of Philippine regions. Use arrow keys to cycle regions and Enter to select."></div>
+        </div>
+        <div class="caption">Height and colour show the selected measure. Regions above 4% have a red outline. Press Esc to clear selection.</div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3>Ranked regions</h3>
+          <span class="hint" id="rankHint">latest month</span>
+        </div>
+        <div class="rank" id="rankList" role="listbox" aria-label="Regions ranked by latest inflation"></div>
+      </div>
+    </section>
+
+    <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+      <button class="tab" role="tab" aria-selected="true" data-tab="overview">Overview</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="drivers">Drivers</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="forecast">Forecast and scenarios</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="risk">Above-target risk</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="structure">Regions</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="data">Data and SQL</button>
+    </nav>
+
+    <section class="panel" id="panel-overview" role="tabpanel">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Overall vs core inflation</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="headline" data-sql-args='{"start":"START","end":"END"}'>View SQL</button>
+              <button class="tool" data-export="headline">CSV</button>
+              <button class="tool" data-alt="alt-headline">Alt text</button>
+            </div>
+          </div>
+          <div id="headlineChart" class="plot tall"></div>
+          <div class="caption" id="alt-headline" hidden>Line chart of overall and core inflation, January 2018 to October 2026,
+            with a shaded 2–4% target band. Headline peaks at 8.7% in January 2023 and 7.8% in October 2026; core is smoother and lags.</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Inflation calendar</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="calendar" data-sql-args='{"start":"2018-01-01","end":"2026-10-01"}'>View SQL</button>
+              <button class="tool" data-export="calendar">CSV</button>
+            </div>
+          </div>
+          <div id="calendarChart" class="plot tall"></div>
+          <div class="caption">Year by month, diverging scale centred at 3%. Values at or above 15% are clipped and labelled 15+.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Selected region vs national</h3>
+          <span class="hint" id="focusLabel">Philippines</span></div>
+        <div id="focusChart" class="plot"></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Distribution, full sample vs 2018–2026</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="distribution">View SQL</button>
+              <button class="tool" data-export="distribution">CSV</button>
+            </div>
+          </div>
+          <div id="distChart" class="plot"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Long run, 1958–2026</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="headline" data-sql-args='{"start":"1958-01-01","end":"2026-10-01"}'>View SQL</button>
+            </div>
+          </div>
+          <div id="longChart" class="plot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-drivers" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Spending basket</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="treemap" data-sql-args='{"date":"MAPDATE"}'>View SQL</button>
+              <button class="tool" data-export="treemap">CSV</button>
+            </div>
+          </div>
+          <div id="treemap" class="plot tall"></div>
+          <div class="caption">Area shows share of the 2018 basket; colour shows latest inflation. <span id="basketSelection">Click a tile to focus a sector.</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>What pushes inflation</h3>
+            <div class="card-tools"><button class="tool" data-export="treemap">CSV</button></div>
+          </div>
+          <div id="contribChart" class="plot tall"></div>
+          <div class="caption">Each bar is basket share times inflation, in percentage points.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Inflation by sector and month</h3>
+          <div class="card-tools">
+            <button class="tool" data-sql="sector_heatmap" data-sql-args='{"end":"END"}'>View SQL</button>
+            <button class="tool" data-export="sector_heatmap">CSV</button>
+          </div>
+        </div>
+        <div id="sectorHeat" class="plot tall"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Each sector over time</h3></div>
+        <div id="sectorSmall" class="mini-grid"></div>
+        <div class="caption">Each panel is one spending category over the last 36 months. Click a panel to select it for the heatmap and table.</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Spending category details</h3><span class="hint">latest month</span></div>
+        <div class="tablewrap"><table class="data" id="sectorTable"></table></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-forecast" role="tabpanel" hidden>
+      <div class="card">
+        <div class="card-head"><h3>Forecast and what-if scenarios</h3>
+          <div class="card-tools">
+            <button class="tool" id="fcSqlBtn">View SQL</button>
+            <button class="tool" id="fcCsvBtn">CSV</button>
+          </div>
+        </div>
+        <div class="controls">
+          <div><label for="fcModel">Model</label>
+            <select id="fcModel"><option value="sarima">SARIMA (seasonal model)</option><option value="ets">ETS / Holt-Winters (trend + season)</option><option value="both">Both</option></select></div>
+          <div><label for="fcHorizon">Horizon <span id="fcHorizonVal">24</span> mo</label>
+            <input id="fcHorizon" type="range" min="6" max="36" value="24"></div>
+          <div><label for="fcShock">Price change <span id="fcShockVal">0</span>%</label>
+            <input id="fcShock" type="range" min="-60" max="60" value="0"></div>
+          <div><label for="fcShockStart">Starts at month #</label>
+            <input id="fcShockStart" type="number" min="1" max="36" value="1"></div>
+          <div><label for="fcNode">Affected item</label>
+            <select id="fcNode"><option value="">None</option></select></div>
+          <button class="btn primary" id="fcRun">Fit forecast</button>
+        </div>
+        <div id="fanChart" class="plot tall"></div>
+        <div class="caption" id="fcMeta">Shaded bands are likely ranges (80% and 95%). Price changes use the 2018 basket-weight approximation.</div>
+        <div class="sql-drawer" id="fcSql"><div class="meta">POST /api/forecast, live fit, LRU-cached</div>
+          <pre>POST /api/forecast
+{ "model": "sarima|ets|both", "horizon": 6..36,
+  "shock_node": "COICOP", "shock_pct": -60..60, "shock_start": 1..36 }</pre></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Published backtest</h3></div>
+          <div class="tablewrap"><table class="data" id="backtestTable"></table></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Fold-level interpretation</h3></div>
+          <div class="caption">
+            Stable period (Nov 2024–Oct 2025): Holt-Winters has the smaller average miss, 0.84 vs 1.16 pp.
+            Surge period (Nov 2025–Oct 2026): SARIMA degrades less, 3.03 vs 4.10 pp average miss.
+            A single blended accuracy would hide this regime dependence, so both folds stay visible.
+            MAPE is inflated near zero and is shown for completeness only.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-risk" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Above-target risk model</h3>
+            <div class="card-tools"><button class="tool" id="rocSqlBtn">View SQL</button></div>
+          </div>
+          <div id="rocChart" class="plot"></div>
+          <div class="caption">Chance of inflation above 4% next month. AUC (ranking) 0.940, AP (precision) 0.979, 198 test cases. Cut-off-dependent scores are inflated by the 2026 surge.</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Cut-off explorer</h3></div>
+          <div class="controls">
+            <div><label for="thrSlider">Cut-off probability <span id="thrVal">0.50</span></label>
+              <input id="thrSlider" type="range" min="0.05" max="0.95" step="0.01" value="0.5"></div>
+          </div>
+          <div class="kpis" id="thrKpis"></div>
+          <div class="tablewrap"><table class="data" id="confusionTable"></table></div>
+          <div class="sql-drawer" id="rocSql"><div class="meta">POST /api/classifier/threshold, stored probabilities</div>
+            <pre>POST /api/classifier/threshold { "threshold": 0.50 }</pre></div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>What drives the model</h3></div>
+          <div id="shapBar" class="plot"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>What drives each prediction</h3></div>
+          <div id="shapSwarm" class="plot"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Why this prediction</h3>
+          <span class="hint" id="shapLocalLabel">click a point above</span></div>
+        <div id="shapLocal" class="plot tall"></div>
+        <div class="caption">Step-by-step contributions for one region-month; the bars add up to the model estimate.</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>SARIMA forecast errors</h3>
+          <div class="card-tools"><button class="tool" id="resSqlBtn">View SQL</button></div>
+        </div>
+        <div id="residChart" class="plot"></div>
+        <div class="caption">Difference between actual and fitted values for the SARIMA model; grey lines mark ±2 standard errors.</div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-structure" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Regional grouping (PCA)</h3>
+            <div class="card-tools">
+              <button class="tool" data-sql="pca">View SQL</button>
+              <button class="tool" data-export="region_table">CSV</button>
+            </div>
+          </div>
+          <div id="pcaChart" class="plot tall"></div>
+          <div class="caption">Component 1 captures inflation level (29.9% of differences); component 2 captures timing (20.4%). Size shows volatility, colour shows latest inflation. Click a point to select the region.</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Regional table</h3><span class="hint">click a row to select</span></div>
+          <div class="tablewrap"><table class="data" id="regionTable"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-data" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Data tables and queries</h3></div>
+          <div class="caption">
+            Data tables: linked tables stored in Parquet and queried in memory with DuckDB.
+            Every panel has a SQL drawer and a CSV export. All responses are summary rows, always fewer than 1,000.
+          </div>
+          <div class="controls">
+            <button class="btn" data-export="headline">Inflation CSV</button>
+            <button class="btn" data-export="region_table">Region table CSV</button>
+            <button class="btn" data-export="sector_heatmap">Sector-month CSV</button>
+            <button class="btn" id="reloadBtn">Reload data</button>
+          </div>
+          <div class="sql-drawer open" id="dataSql"><div class="meta">/api/sql/{panel_id}</div>
+            <pre id="dataSqlText">Select "View SQL" on any panel, or load one here:
+GET /api/sql/map</pre></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Model metrics</h3></div>
+          <div class="tablewrap"><table class="data" id="metricsTable"></table></div>
+          <div class="caption">Data vintage 2026-11-05. Raw PSA tables remain the property of the Philippine Statistics Authority.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Region detail</h3><span class="hint">latest month, all 18 mapped regions</span></div>
+        <div class="tablewrap"><table class="data" id="dataRegionTable"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

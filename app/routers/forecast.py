@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import dataclasses
+import time
+
+from fastapi import APIRouter
+
+from app.schemas import ForecastRequest, ThresholdRequest
+from app.services import forecast as svc
+from app.services import models
+
+router = APIRouter()
+
+
+@router.post("/forecast")
+def run_forecast(req: ForecastRequest):
+    params = svc.ForecastParams(
+        model=req.model, p=req.p, d=req.d, q=req.q, P=req.P, D=req.D, Q=req.Q,
+        trend=req.trend, seasonal=req.seasonal, damped=req.damped,
+        horizon=req.horizon, shock_node=req.shock_node,
+        shock_pct=req.shock_pct, shock_start=req.shock_start,
+    )
+    t0 = time.perf_counter()
+    try:
+        result = svc.forecast(params)
+        baseline = None
+        if req.shock_node and req.shock_pct:
+            base_params = dataclasses.replace(params, shock_node=None, shock_pct=0.0)
+            baseline = svc.forecast(base_params)["paths"]
+    except Exception as exc:  # keep the API honest about failed fits
+        return {"data": [], "meta": {"panel_id": "forecast", "error": str(exc),
+                                     "row_count": 0, "cache": "miss"}}
+    fit_ms = round((time.perf_counter() - t0) * 1000, 1)
+    rows = sum(len(p["rows"]) for p in result["paths"])
+    return {"data": result["paths"], "history": result["history"], "baseline": baseline,
+            "meta": {"panel_id": "forecast", "row_count": rows, "fit_ms": fit_ms,
+                     "cache": "lru", "notes": result["notes"], "params": req.model_dump()}}
+
+
+@router.get("/classifier/curves")
+def curves():
+    return {
+        "data": {
+            "roc": models.ROC.to_dict("records"),
+            "pr": models.PR.to_dict("records"),
+            "base_rate": models.METRICS.get("classifier", {}).get("positive_rate"),
+            "auc": models.METRICS.get("classifier", {}).get("AUC"),
+            "ap": models.METRICS.get("classifier", {}).get("average_precision"),
+        },
+        "meta": {"panel_id": "classifier_curves"},
+    }
+
+
+@router.post("/classifier/threshold")
+def threshold(req: ThresholdRequest):
+    return {"data": models.classifier_metrics(req.threshold),
+            "meta": {"panel_id": "classifier_threshold"}}
+
+
+@router.get("/nowcast/shap/global")
+def shap_global():
+    rows = models.FEATURES.sort_values("mean_abs_shap").to_dict("records")
+    return {"data": rows, "meta": {"panel_id": "shap_global", "row_count": len(rows)}}
+
+
+@router.get("/nowcast/shap/beeswarm")
+def shap_beeswarm(sample: int = 60):
+    df = models.SHAP
+    if df.empty:
+        return {"data": [], "meta": {"panel_id": "shap_beeswarm", "row_count": 0}}
+    # stride-sample rows while keeping every feature per chosen row
+    rows = df.drop_duplicates(subset=["date", "geolocation"]).head(400)
+    if len(rows) > sample:
+        rows = rows.iloc[:: max(1, len(rows) // sample)]
+    pick = set(zip(rows["date"], rows["geolocation"]))
+    sub = df[[(d, g) in pick for d, g in zip(df["date"], df["geolocation"])]]
+    if len(sub) > 999:
+        sub = sub.iloc[:999]
+    return {"data": sub.to_dict("records"),
+            "meta": {"panel_id": "shap_beeswarm", "row_count": len(sub), "cache": "artifact"}}
+
+
+@router.get("/nowcast/shap/local")
+def shap_local(region: str, date: str):
+    rows = models.local_shap(region, date)
+    base = models.METRICS.get("shap_base_value")
+    pred = round(base + sum(r["contribution"] for r in rows), 4) if rows and base is not None else None
+    return {"data": rows, "prediction": pred, "base": base,
+            "meta": {"panel_id": "shap_local", "row_count": len(rows), "cache": "artifact"}}
+
+
+@router.get("/nowcast/residuals")
+def residuals():
+    import numpy as np
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+    from app.services.forecast import national_cpi
+
+    df = national_cpi()
+    fit = SARIMAX(np.log(df["cpi"].to_numpy()), order=(1, 1, 1),
+                  seasonal_order=(1, 1, 0, 12), enforce_stationarity=False,
+                  enforce_invertibility=False).fit(disp=False)
+    resid = np.asarray(fit.resid)[13:]
+    dates = df["date"].iloc[13:]
+    rows = [{"date": str(d)[:10], "residual": round(float(r), 4)}
+            for d, r in zip(dates, resid)]
+    return {"data": rows[-120:], "meta": {"panel_id": "nowcast_residuals",
+                                          "row_count": min(120, len(rows)), "cache": "computed"}}
+
+
+@router.get("/model/metrics")
+def model_metrics():
+    return {"data": models.METRICS, "meta": {"panel_id": "model_metrics"}}
+
+
+@router.get("/model/backtest")
+def model_backtest():
+    rows = models.BACKTEST.round(3).to_dict("records")
+    return {"data": rows, "meta": {"panel_id": "model_backtest", "row_count": len(rows)}}
