@@ -111,7 +111,8 @@ def _copy(res: QueryResult, cache: str) -> QueryResult:
 
 def query(panel_id: str, params: list | None = None, *, max_rows: int = MAX_ROWS) -> QueryResult:
     key = (panel_id, tuple(params or []), max_rows)
-    hit = _cache.get(key)
+    with _lock:
+        hit = _cache.get(key)
     if hit is not None:
         return _copy(hit, "hit")
     res = _run(panel_id, params, max_rows)
