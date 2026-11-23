@@ -23,7 +23,7 @@ class ForecastParams:
     d: int = 1
     q: int = 1
     P: int = 1
-    D: int = 1
+    D: int = 0
     Q: int = 0
     trend: str = "add"
     seasonal: str = "add"
@@ -89,8 +89,11 @@ def _fit(model: str, p: int, d: int, q: int, P: int, D: int, Q: int,
         from statsmodels.tsa.exponential_smoothing.ets import ETSModel
         idx = pd.DatetimeIndex(pd.to_datetime(df["date"]))
         series = pd.Series(hist, index=idx)
-        fit = ETSModel(series, error="add", trend=trend, damped_trend=damped,
-                       seasonal=seasonal, seasonal_periods=12,
+        trend_arg = None if trend == "none" else trend
+        seasonal_arg = None if seasonal == "none" else seasonal
+        damped_arg = bool(damped and trend_arg is not None)
+        fit = ETSModel(series, error="add", trend=trend_arg, damped_trend=damped_arg,
+                       seasonal=seasonal_arg, seasonal_periods=12,
                        initialization_method="estimated").fit(disp=False)
         pred = fit.get_prediction(start=dates[0], end=dates[-1])
         summary = pred.summary_frame(alpha=0.20)
