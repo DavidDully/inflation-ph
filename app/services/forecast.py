@@ -83,11 +83,13 @@ def _fit(model: str, p: int, d: int, q: int, P: int, D: int, Q: int,
         ci80 = np.exp(np.asarray(fc.conf_int(alpha=0.20))) * shock[:, None]
         ci95 = np.exp(np.asarray(fc.conf_int(alpha=0.05))) * shock[:, None]
         out.append(_frame(dates, mean, ci80[:, 0], ci80[:, 1], ci95[:, 0], ci95[:, 1],
-                          hist, "SARIMA"))
+                          hist, "SARIMA", aic=round(float(fit.aic), 2)))
 
     if model in ("ets", "both"):
         from statsmodels.tsa.exponential_smoothing.ets import ETSModel
         idx = pd.DatetimeIndex(pd.to_datetime(df["date"]))
+        if idx.inferred_freq == "MS":
+            idx = pd.DatetimeIndex(idx, freq="MS")
         series = pd.Series(hist, index=idx)
         trend_arg = None if trend == "none" else trend
         seasonal_arg = None if seasonal == "none" else seasonal
@@ -103,11 +105,12 @@ def _fit(model: str, p: int, d: int, q: int, P: int, D: int, Q: int,
         summary95 = pred.summary_frame(alpha=0.05)
         lo95 = summary95["pi_lower"].to_numpy() * shock
         hi95 = summary95["pi_upper"].to_numpy() * shock
-        out.append(_frame(dates, mean, lo80, hi80, lo95, hi95, hist, "ETS"))
+        out.append(_frame(dates, mean, lo80, hi80, lo95, hi95, hist, "ETS",
+                          aic=round(float(fit.aic), 2)))
     return out
 
 
-def _frame(dates, mean, lo80, hi80, lo95, hi95, hist, label: str) -> dict:
+def _frame(dates, mean, lo80, hi80, lo95, hi95, hist, label: str, aic: float | None = None) -> dict:
     yoy = _yoy_path(hist, mean)
     yoy80l = _yoy_path(hist, lo80)
     yoy80h = _yoy_path(hist, hi80)
@@ -128,7 +131,7 @@ def _frame(dates, mean, lo80, hi80, lo95, hi95, hist, label: str) -> dict:
     return {
         "model": label,
         "rows": rows,
-        "aic": None,
+        "aic": aic,
     }
 
 
