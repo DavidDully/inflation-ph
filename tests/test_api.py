@@ -122,6 +122,20 @@ def test_sql_preview_and_export():
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
 
 
+def test_edge_cases():
+    ets_none = client.post("/api/forecast", json={
+        "model": "ets", "trend": "none", "seasonal": "none", "damped": True, "horizon": 6,
+    }).json()
+    assert ets_none["data"] and len(ets_none["data"][0]["rows"]) == 6
+    assert ets_none["data"][0]["aic"] is not None
+
+    bad_news = client.get("/api/news", params={"month": "2026-13-01"})
+    assert bad_news.status_code == 422
+
+    bad_export = client.get("/api/export/unknown_panel.csv")
+    assert bad_export.status_code == 404
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
