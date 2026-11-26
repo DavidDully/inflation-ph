@@ -32,7 +32,7 @@ export async function initForecast(meta) {
     const drawer = $("#fcSql");
     drawer.classList.toggle("open");
     if (drawer.classList.contains("open")) {
-      const sql = (await get("/sql/kpis")).data.sql; // show pipeline provenance for the fit input
+      const sql = (await get("/sql/headline")).data.sql; // show pipeline provenance for the fit input
       $("#fcSql pre").textContent =
         "POST /api/forecast\n\n-- fit input series\n" + sql;
     }
@@ -86,8 +86,13 @@ function draw(body) {
     mode: "lines", name: "Actual", line: { color: C.ink, width: 1.6 },
   });
   const colors = { SARIMA: C.teal, ETS: C.vermilion };
+  const fills = {
+    SARIMA: ["rgba(13,110,99,.09)", "rgba(13,110,99,.18)"],
+    ETS: ["rgba(196,73,45,.09)", "rgba(196,73,45,.18)"],
+  };
   (body.data || []).forEach((path) => {
     const c = colors[path.model] || C.amber;
+    const [fill95, fill80] = fills[path.model] || ["rgba(217,119,6,.09)", "rgba(217,119,6,.18)"];
     const rows = path.rows;
     traces.push({
       x: rows.map((r) => r.date), y: rows.map((r) => r.hi95), type: "scatter", mode: "lines",
@@ -95,7 +100,7 @@ function draw(body) {
     });
     traces.push({
       x: rows.map((r) => r.date), y: rows.map((r) => r.lo95), type: "scatter", mode: "lines",
-      line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(13,110,99,.09)",
+      line: { width: 0 }, fill: "tonexty", fillcolor: fill95,
       name: `${path.model} 95%`, hoverinfo: "skip",
     });
     traces.push({
@@ -104,7 +109,7 @@ function draw(body) {
     });
     traces.push({
       x: rows.map((r) => r.date), y: rows.map((r) => r.lo80), type: "scatter", mode: "lines",
-      line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(13,110,99,.18)",
+      line: { width: 0 }, fill: "tonexty", fillcolor: fill80,
       name: `${path.model} 80%`, hoverinfo: "skip",
     });
     traces.push({
@@ -133,6 +138,7 @@ function draw(body) {
   }), config);
   const n = body.data?.[0]?.rows?.length || 0;
   const fit = body.meta?.fit_ms ? `, fit ${body.meta.fit_ms} ms` : "";
-  $("#fcMeta").textContent = `${body.data.map((p) => p.model).join(" + ")}, ${n} months${fit}, ` +
+  const models = (body.data || []).map((p) => (p.aic != null ? `${p.model} (AIC ${p.aic})` : p.model)).join(" + ");
+  $("#fcMeta").textContent = `${models}, ${n} months${fit}, ` +
     "shaded bands show likely ranges (80% and 95%); dotted = no price-change baseline; price changes use the basket-weight approximation.";
 }
